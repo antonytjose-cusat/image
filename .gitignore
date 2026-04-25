@@ -1,0 +1,12 @@
+venv/
+data/
+checkpoints/
+checkpoints_old/
+comparison/
+__pycache__/
+*.pt
+*.pyc
+*.pyo
+*.egg-info/
+.DS_Store
+results/
