@@ -108,3 +108,34 @@ def adversarial_loss_d(real_outputs, fake_outputs):
     for real, fake in zip(real_outputs, fake_outputs):
         loss += 0.5 * (torch.mean((real - 1) ** 2) + torch.mean(fake ** 2))
     return loss / len(real_outputs)
+
+
+# ─────────────────────────────────────────────
+# Edge Sharpening Loss (option 5)
+# Penalizes blurry edges by comparing Sobel maps
+# ─────────────────────────────────────────────
+
+class EdgeLoss(nn.Module):
+    """
+    Encourages sharp cartoon edges by matching Sobel edge maps
+    between generated image and target cartoon.
+    """
+    def __init__(self):
+        super().__init__()
+        sobel_x = torch.tensor([[-1,0,1],[-2,0,2],[-1,0,1]],
+                                dtype=torch.float32).view(1,1,3,3)
+        sobel_y = torch.tensor([[-1,-2,-1],[0,0,0],[1,2,1]],
+                                dtype=torch.float32).view(1,1,3,3)
+        self.register_buffer("sobel_x", sobel_x)
+        self.register_buffer("sobel_y", sobel_y)
+
+    def _edges(self, img):
+        # Convert to grayscale
+        gray = 0.299*img[:,0:1] + 0.587*img[:,1:2] + 0.114*img[:,2:3]
+        import torch.nn.functional as F
+        ex = F.conv2d(gray, self.sobel_x, padding=1)
+        ey = F.conv2d(gray, self.sobel_y, padding=1)
+        return torch.sqrt(ex**2 + ey**2 + 1e-6)
+
+    def forward(self, generated, target):
+        return nn.functional.l1_loss(self._edges(generated), self._edges(target))

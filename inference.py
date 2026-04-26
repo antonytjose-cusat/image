@@ -47,7 +47,6 @@ def main(args):
     ckpt = torch.load(args.checkpoint, map_location=device)
     G.load_state_dict(ckpt["G"])
     print(f"Loaded checkpoint: {args.checkpoint}")
-
     if os.path.isdir(args.input):
         os.makedirs(args.output, exist_ok=True)
         files = [f for f in os.listdir(args.input)
