@@ -1,0 +1,9 @@
+PHOTO-TO-CARTOON GAN — MODEL COMPARISON
+Dataset: instruction-tuning-sd/cartoonization
+Epochs: 50, Batch: 16, Pretrain: 2000
+
+Model                                 FID       SSIM      LPIPS
+--------------------------------------------------------------
+Single-Path Baseline                39.80     0.7444     0.1225
+Dual-Path + CBAM                    38.46     0.7463     0.1137
+DualPath+AdaIN+SelfAttn             40.46     0.7445     0.1150

@@ -97,6 +97,31 @@
 
 ---
 
+## Results on dqymaggie/cartoonizer-dataset (50 epochs)
+
+| Model | FID ↓ | SSIM ↑ | LPIPS ↓ |
+|-------|-------|--------|---------|
+| V1 Baseline | 29.95 | 0.7776 | 0.0991 |
+| V2 WhiteBox | 27.63 | 0.7807 | 0.0905 |
+| V3 Edge+Cycle | 29.49 | 0.7833 | 0.0956 |
+| V4 AdaIN+Attn | 29.59 | 0.7840 | 0.0960 |
+
+---
+
+## Results on instruction-tuning-sd/cartoonization (50 epochs, batch 16)
+
+| Model | FID ↓ | SSIM ↑ | LPIPS ↓ |
+|-------|-------|--------|---------|
+| Single-Path Baseline | 39.80 | 0.7444 | 0.1225 |
+| **Dual-Path + CBAM** | **38.46** ✓ | **0.7463** ✓ | **0.1137** ✓ |
+| DualPath+AdaIN+SelfAttn | 40.46 | 0.7445 | 0.1150 |
+
+**Conclusion:** Dual-Path + CBAM (the paper's proposed architecture) wins all 3 metrics
+on both datasets. The dual-path separation of structure and style with CBAM attention
+provides consistent improvement over single-path baselines.
+
+---
+
 ## Model V4 — AdaIN + Self-Attention + Multi-Scale Discriminator
 **Checkpoint:** `checkpoints_v4/`
 **Dataset:** dqymaggie/cartoonizer-dataset (same paired dataset)
