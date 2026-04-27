@@ -16,11 +16,13 @@ Hardware: NVIDIA GeForce RTX 5070 (12GB VRAM), Linux
 
 | # | Model | Architecture | Losses | Epochs | Batch | FID ↓ | SSIM ↑ | LPIPS ↓ | Checkpoint |
 |---|-------|-------------|--------|--------|-------|-------|--------|---------|------------|
-| 1 | V1 Baseline | Dual-Path + CBAM, LeakyReLU, weighted fusion | Adv + Pixel(100) + Content(10) + Style(50) | 50 | 4 | 29.95 | 0.7776 | 0.0991 | checkpoints_old/ |
+| 0 | Single-Path Baseline | U-Net + CBAM encoder, 4 ResBlocks, single path | Adv + Pixel(100) + Content(10) + Style(50) | 50 | 8 | 31.16 | 0.7754 | 0.0990 | ckpt_singlepath_old/ |
+| 1 | V1 Dual-Path + CBAM | Dual-Path + CBAM, LeakyReLU, weighted fusion | Adv + Pixel(100) + Content(10) + Style(50) | 50 | 4 | 29.95 | 0.7776 | 0.0991 | checkpoints_old/ |
 | 2 | V2 WhiteBox | V1 + spectral norm D, FP16, LR decay | V1 + TV(1.0), pretrain 2000 steps | 100 | 8 | 27.63 | 0.7807 | 0.0905 | checkpoints_v2/ |
 | 3 | V3 Edge+Cycle | V2 + G_inv cycle generator | V2 + Edge(10) + Cycle(10) + Style(100) | 50 | 8 | 29.49 | 0.7833 | 0.0956 | checkpoints_v3/ |
 | 4 | V4 AdaIN+Attn | Dual-Path + AdaIN + Self-Attention + GELU + Multi-Scale D | Adv + Pixel(100) + Content(10) + Style(100) + Edge(10) + TV(1) | 50 | 8 | 29.59 | 0.7840 | 0.0960 | checkpoints_v4/ |
 
+**Single-Path → Dual-Path improvement: FID 31.16 → 29.95 (3.9% better), SSIM 0.7754 → 0.7776**
 **Best on Dataset 1:** V2 WhiteBox (FID 27.63, LPIPS 0.0905), V4 AdaIN (SSIM 0.7840)
 
 ### Dataset 2: instruction-tuning-sd/cartoonization (paired, 4000 train / 1000 test)

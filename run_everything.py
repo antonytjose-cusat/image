@@ -23,7 +23,7 @@ from torch.optim.lr_scheduler import StepLR
 # CONFIG
 # ═══════════════════════════════════════════════
 DATA_DIR       = "data_new"
-EPOCHS         = 50
+EPOCHS         = 100
 BATCH_SIZE     = 16
 PRETRAIN_STEPS = 2000
 LR             = 2e-4
@@ -214,6 +214,96 @@ def train_model(G, D, loader, ckpt_dir, name):
 
 
 # ═══════════════════════════════════════════════
+# STEP 2B: WHITE-BOX TRAINING (with guided filter surface)
+# ═══════════════════════════════════════════════
+
+def train_model_whitebox(G, D, loader, ckpt_dir, name):
+    """Training with White-Box guided filter surface representation fed to D."""
+    from model.white_box import surface_representation, total_variation_loss as tv_loss
+
+    print(f"\n{'='*60}")
+    print(f"TRAINING: {name}")
+    print(f"{'='*60}")
+
+    vgg = VGGFeatures().to(DEVICE)
+    content_fn = ContentLoss(vgg)
+    style_fn   = StyleLoss(vgg)
+    edge_fn    = EdgeLoss().to(DEVICE)
+    scaler     = torch.amp.GradScaler("cuda") if DEVICE.type == "cuda" else None
+
+    opt_G = Adam(G.parameters(), lr=LR, betas=(0.5, 0.999))
+    opt_D = Adam(D.parameters(), lr=LR, betas=(0.5, 0.999))
+    sch_G = StepLR(opt_G, step_size=25, gamma=0.5)
+    sch_D = StepLR(opt_D, step_size=25, gamma=0.5)
+    os.makedirs(ckpt_dir, exist_ok=True)
+
+    # Pretrain
+    print(f"  Pretraining ({PRETRAIN_STEPS} steps)...")
+    G.train(); step = 0
+    while step < PRETRAIN_STEPS:
+        for photos, cartoons in loader:
+            if step >= PRETRAIN_STEPS: break
+            photos, cartoons = photos.to(DEVICE), cartoons.to(DEVICE)
+            with torch.amp.autocast("cuda", enabled=scaler is not None):
+                fake = G(photos)
+                loss = 100*pixel_loss(fake,cartoons) + 10*content_fn(fake,cartoons)
+            opt_G.zero_grad()
+            if scaler: scaler.scale(loss).backward(); scaler.step(opt_G); scaler.update()
+            else: loss.backward(); opt_G.step()
+            step += 1
+            if step % 500 == 0: print(f"    pretrain step {step}/{PRETRAIN_STEPS} loss={loss.item():.4f}")
+
+    # GAN Training with guided filter surface
+    print(f"  GAN training ({EPOCHS} epochs) with WhiteBox surface...")
+    t0 = time.time()
+    for epoch in range(1, EPOCHS + 1):
+        G.train(); D.train()
+        for photos, cartoons in loader:
+            photos, cartoons = photos.to(DEVICE), cartoons.to(DEVICE)
+
+            # Compute surface representations (guided filter)
+            with torch.no_grad():
+                surf_real = surface_representation(cartoons)
+
+            # D step
+            with torch.no_grad():
+                with torch.amp.autocast("cuda", enabled=scaler is not None):
+                    fake = G(photos)
+            with torch.no_grad():
+                surf_fake = surface_representation(fake.float())
+            with torch.amp.autocast("cuda", enabled=scaler is not None):
+                # D sees both raw images and surface-filtered versions
+                ld = (adversarial_loss_d(D(cartoons), D(fake.detach()))
+                    + adversarial_loss_d(D(surf_real), D(surf_fake.detach())))
+            opt_D.zero_grad()
+            if scaler: scaler.scale(ld).backward(); scaler.step(opt_D); scaler.update()
+            else: ld.backward(); opt_D.step()
+
+            # G step
+            with torch.amp.autocast("cuda", enabled=scaler is not None):
+                fake = G(photos)
+                lg = (adversarial_loss_g(D(fake))
+                      + 100*pixel_loss(fake,cartoons)
+                      + 10*content_fn(fake,cartoons)
+                      + 100*style_fn(fake,cartoons)
+                      + 10*edge_fn(fake,cartoons)
+                      + 1*tv_loss(fake))
+            opt_G.zero_grad()
+            if scaler: scaler.scale(lg).backward(); scaler.step(opt_G); scaler.update()
+            else: lg.backward(); opt_G.step()
+
+        sch_G.step(); sch_D.step()
+        if epoch % 10 == 0 or epoch == EPOCHS:
+            print(f"    Epoch [{epoch}/{EPOCHS}] D={ld.item():.4f} G={lg.item():.4f}")
+            torch.save({"G": G.state_dict(), "D": D.state_dict()},
+                       os.path.join(ckpt_dir, f"ckpt_epoch{epoch:03d}.pt"))
+
+    mins = (time.time() - t0) / 60
+    print(f"  {name} complete in {mins:.1f} min\n")
+    return G
+
+
+# ═══════════════════════════════════════════════
 # STEP 3: EVALUATION FUNCTION
 # ═══════════════════════════════════════════════
 
@@ -270,23 +360,33 @@ if __name__ == "__main__":
     # Step 3: Train + Evaluate Model 1
     G1 = SinglePathGenerator().to(DEVICE)
     D1 = MultiDiscriminator().to(DEVICE)
-    G1 = train_model(G1, D1, train_loader, "ckpt_single", "Single-Path Baseline")
+    G1 = train_model(G1, D1, train_loader, "ckpt_single_100", "Single-Path Baseline")
     results.append(evaluate(G1, test_loader, "Single-Path Baseline"))
     del G1, D1; torch.cuda.empty_cache()
 
     # Step 4: Train + Evaluate Model 2
     G2 = LegacyDualPath().to(DEVICE)
     D2 = MultiDiscriminator().to(DEVICE)
-    G2 = train_model(G2, D2, train_loader, "ckpt_dualpath", "Dual-Path + CBAM")
+    G2 = train_model(G2, D2, train_loader, "ckpt_dualpath_100", "Dual-Path + CBAM")
     results.append(evaluate(G2, test_loader, "Dual-Path + CBAM"))
     del G2, D2; torch.cuda.empty_cache()
 
     # Step 5: Train + Evaluate Model 3
     G3 = DualPathGenerator().to(DEVICE)
     D3 = MultiDiscriminator().to(DEVICE)
-    G3 = train_model(G3, D3, train_loader, "ckpt_adain", "DualPath+AdaIN+SelfAttn")
+    G3 = train_model(G3, D3, train_loader, "ckpt_adain_100", "DualPath+AdaIN+SelfAttn")
     results.append(evaluate(G3, test_loader, "DualPath+AdaIN+SelfAttn"))
     del G3, D3; torch.cuda.empty_cache()
+
+    # Step 6: Train + Evaluate Model 4 — Dual-Path + WhiteBox (guided filter + TV)
+    print(f"\n{'='*60}")
+    print("MODEL 4: Dual-Path + CBAM + WhiteBox Losses")
+    print(f"{'='*60}")
+    G4 = LegacyDualPath().to(DEVICE)
+    D4 = MultiDiscriminator().to(DEVICE)
+    G4 = train_model_whitebox(G4, D4, train_loader, "ckpt_whitebox_100", "DualPath+WhiteBox")
+    results.append(evaluate(G4, test_loader, "DualPath+WhiteBox"))
+    del G4, D4; torch.cuda.empty_cache()
 
     # Step 6: Print final comparison
     print("\n" + "="*70)
