@@ -1,0 +1,8 @@
+GAN vs DIFFUSION COMPARISON
+
+Model                                 FID       SSIM      LPIPS
+--------------------------------------------------------------
+Single-Path GAN                     39.80     0.7444     0.1225
+Dual-Path+CBAM GAN                  38.46     0.7463     0.1137
+Diffusion+LoRA (alone)             200.33     0.3902     0.4191
+Diffusion+DualPath                 203.01     0.4491     0.4137

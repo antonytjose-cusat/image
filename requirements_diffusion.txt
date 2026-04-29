@@ -1,0 +1,6 @@
+diffusers>=0.25.0
+transformers>=4.35.0
+accelerate>=0.25.0
+peft>=0.7.0
+xformers
+safetensors
